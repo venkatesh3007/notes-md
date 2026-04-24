@@ -9,6 +9,12 @@ const PORT = process.env.PORT || 3000;
 const VAULTS_DIR = process.env.VAULTS_DIR || path.join(__dirname, 'vaults');
 
 app.use(cors());
+
+// Request logging
+app.use((req, res, next) => {
+  console.log(`[${new Date().toISOString()}] ${req.method} ${req.url} - Origin: ${req.headers.origin || "none"}`);
+  next();
+});
 app.use(express.json({ limit: '10mb' }));
 
 // Ensure vaults directory exists

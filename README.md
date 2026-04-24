@@ -1,157 +1,79 @@
-# Notes.md
+# Notes MD — P2P Markdown Vault
 
-An Obsidian alternative with remote vault sync. Access your markdown vaults from anywhere via a mobile app with one-tap sync.
+Local-first markdown reader with P2P sync. No central server storage. Your data stays on your devices.
 
 ## Architecture
 
 ```
-┌─────────────┐      HTTP API      ┌─────────────┐
-│  Mobile App │  ◄──────────────►  │   Server    │
-│  (Capacitor)│                    │  (Node.js)  │
-│             │   ┌──────────┐     │             │
-│  ┌───────┐  │   │  Vaults  │     │  ┌────────┐ │
-│  │ Local │  │   │ (folders)│     │  │position│ │
-│  │ Cache │◄─┘   │          │     │  │-system │ │
-│  └───────┘      │ reasoning│     │  │reasoning│ │
-│                 │/2026-04  │     │  └────────┘ │
-└─────────────────┴──────────┴─────┴─────────────┘
+Server (your machine)          Netlify (signaling only)         Mobile
+├─ Creates .md files    ───►   ├─ Device discovery    ◄───►   ├─ IndexedDB
+├─ Sync daemon                ├─ WebRTC handshake            ├─ Read offline
+└─ Watches for changes        └─ NO file storage             └─ P2P sync
 ```
+
+## How It Works
+
+1. **Server** runs a sync daemon that watches your markdown files
+2. **Netlify Functions** only handle device discovery and WebRTC signaling (zero data storage)
+3. **Mobile app** stores files in IndexedDB, works fully offline
+4. **P2P sync** happens directly between devices via WebRTC when both are online
 
 ## Quick Start
 
-### Server (this machine)
+### 1. Deploy Netlify Functions
 
 ```bash
-cd server
-npm install
-npm start
+# Install Netlify CLI
+npm install -g netlify-cli
+
+# Deploy
+netlify deploy --prod --build
 ```
 
-Server runs on port 3000. Vaults are served from `server/vaults/`.
-
-The `positioning-research` vault is auto-linked to your positioning system's reasoning folder.
-
-### Web App
+### 2. Start Server Sync Daemon
 
 ```bash
-cd app
-npm install
-npm run dev      # development
-npm run build    # production build → dist/
+cd server-sync
+npm install simple-peer wrtc node-fetch
+
+# Set env vars
+export SIGNAL_URL=https://your-site.netlify.app/.netlify/functions
+export VAULT_PATH=/path/to/your/markdown/files
+export VAULT_ID=positioning-research
+
+node daemon.js
 ```
 
-### Mobile App (APK)
+### 3. Install Mobile App
 
-Built automatically via GitHub Actions on every push to `main`.
+Download APK from [releases](https://github.com/venkatesh3007/notes-md/releases).
 
-## API Endpoints
-
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/api/vaults` | List all vaults |
-| GET | `/api/vaults/:name/files` | List files in vault |
-| GET | `/api/vaults/:name/files/:path` | Read file |
-| PUT | `/api/vaults/:name/files/:path` | Write file |
-| POST | `/api/vaults/:name/sync` | Full vault sync |
-
-## Mobile App Features
-
-- **Vault browser** — Browse all files in any vault
-- **Markdown editor** — Edit with live preview (split mode)
-- **One-tap sync** — Pull all vault content for offline access
-- **Offline-first** — Works without connection, syncs when available
-- **Server settings** — Configure your own server URL
-
-## Installing the APK
-
-### Option 1: GitHub Actions (Recommended)
-1. Go to **GitHub repo → Actions → Build & Deploy**
-2. Download the `android-apk` artifact
-3. Transfer to phone and install
-
-### Option 2: Build Locally
-Requires Android SDK + Java 17:
-```bash
-cd app
-npm install
-npm run build
-npx cap sync android
-cd android
-./gradlew assembleDebug
-# APK at: android/app/build/outputs/apk/debug/app-debug.apk
-```
-
-### Option 3: Web App
-Just open the server URL in your mobile browser. Works the same.
-
-## Adding a Vault
-
-Vaults are just folders. To add one:
-
-```bash
-# Symlink any folder as a vault
-ln -s /path/to/your/notes /path/to/server/vaults/my-notes
-```
-
-Or edit `server/index.js` and add to the vaults directory.
-
-## Configuration
-
-### Server URL (Mobile App)
-1. Open app → Settings ⚙
-2. Enter your server URL (e.g., `http://your-server:3000`)
-3. Save
-
-### Default Server
-The app defaults to `http://localhost:3000`. For remote access, change in Settings.
-
-## Tech Stack
-
-- **Server**: Node.js + Express
-- **Web/Mobile**: React + Vite + Capacitor
-- **Sync**: REST API + localStorage cache
-- **CI/CD**: GitHub Actions
-
-## Project Structure
-
-```
-notes-md/
-├── .github/workflows/    # GitHub Actions (build.yml)
-├── app/                  # React + Capacitor app
-│   ├── src/
-│   │   ├── pages/        # VaultList, FileBrowser, Editor, Settings
-│   │   ├── hooks/        # useApi, useLocalStore
-│   │   └── App.jsx
-│   ├── capacitor.config.json
-│   └── package.json
-├── server/               # Node.js API server
-│   ├── index.js
-│   └── package.json
-└── README.md
-```
+Open app → press **Sync Now** → files sync directly from your server to your phone via P2P.
 
 ## Development
 
-### Run Server
 ```bash
-cd server
-npm install
-npm start          # Port 3000
-```
-
-### Run App (Dev Mode)
-```bash
+# Mobile app
 cd app
 npm install
-npm run dev        # Port 5173
+npm run dev        # Web dev
+npx cap open android  # Android Studio
+
+# Server sync
+cd server-sync
+npm install
+node daemon.js
 ```
 
-### Build for Production
-```bash
-cd app
-npm run build      # Output: dist/
-```
+## Security
 
-## License
+- No files stored on Netlify
+- No central database
+- Direct device-to-device encryption via WebRTC
+- Your server, your data
 
-MIT
+## Files
+
+- `app/` — Mobile app (Capacitor + React)
+- `netlify/functions/` — Signaling coordinator (3 functions)
+- `server-sync/` — Server sync daemon

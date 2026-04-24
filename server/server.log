@@ -1,0 +1,4 @@
+Notes-md server running on port 3000
+Vaults directory: /home/openclaw/.openclaw/workspace/notes-md/server/vaults
+Vaults: [ 'positioning-research' ]
+[2026-04-24T12:44:45.788Z] GET /api/health - Origin: none
