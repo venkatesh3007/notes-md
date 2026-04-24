@@ -1,0 +1,17 @@
+{
+  "appId": "com.notesmd.app",
+  "appName": "NotesMd",
+  "webDir": "dist",
+  "server": {
+    "androidScheme": "https",
+    "cleartext": true
+  },
+  "android": {
+    "buildOptions": {
+      "keystorePath": "",
+      "keystoreAlias": "",
+      "keystorePassword": "",
+      "keystoreAliasPassword": ""
+    }
+  }
+}
