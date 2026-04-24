@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import VaultList from './pages/VaultList';
 import Editor from './pages/Editor';
+import Settings from './pages/Settings';
 
 const styles = {
   app: { 
@@ -13,10 +14,9 @@ const styles = {
 };
 
 export default function App() {
-  const [currentView, setCurrentView] = useState('vault'); // vault, editor
+  const [currentView, setCurrentView] = useState('vault'); // vault, editor, settings
   const [selectedFile, setSelectedFile] = useState(null);
   
-  // Default vault - can be configured
   const vaultId = 'positioning-research';
 
   function handleOpenFile(file) {
@@ -34,7 +34,8 @@ export default function App() {
       {currentView === 'vault' && (
         <VaultList 
           vaultId={vaultId} 
-          onOpenFile={handleOpenFile} 
+          onOpenFile={handleOpenFile}
+          onSettings={() => setCurrentView('settings')}
         />
       )}
       
@@ -44,6 +45,10 @@ export default function App() {
           filePath={selectedFile.path}
           onBack={handleBack}
         />
+      )}
+
+      {currentView === 'settings' && (
+        <Settings onBack={() => setCurrentView('vault')} />
       )}
     </div>
   );

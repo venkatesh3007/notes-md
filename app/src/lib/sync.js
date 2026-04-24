@@ -1,5 +1,11 @@
 // Sync client — fetches files from server via HTTP
-const SYNC_URL = 'http://139.59.57.222:3333';
+function getSettings() {
+  try {
+    const saved = localStorage.getItem('notes-md-settings');
+    if (saved) return JSON.parse(saved);
+  } catch (e) {}
+  return { serverUrl: 'http://139.59.57.222:3333', vaultId: 'positioning-research' };
+}
 
 export class SyncClient {
   constructor(vaultId) {
@@ -8,17 +14,19 @@ export class SyncClient {
     this.pollInterval = null;
   }
 
+  getServerUrl() {
+    return getSettings().serverUrl || 'http://139.59.57.222:3333';
+  }
+
   async start() {
-    // Initial sync
     await this.sync();
-    // Poll every 30s for updates
     this.pollInterval = setInterval(() => this.sync(), 30000);
   }
 
   async sync() {
+    const serverUrl = this.getServerUrl();
     try {
-      // Get file list from server
-      const res = await fetch(`${SYNC_URL}/vault/${this.vaultId}/files`, {
+      const res = await fetch(`${serverUrl}/vault/${this.vaultId}/files`, {
         mode: 'cors',
         headers: { 'Accept': 'application/json' }
       });
@@ -37,9 +45,12 @@ export class SyncClient {
   }
 
   async fetchFile(filePath) {
+    const serverUrl = this.getServerUrl();
     try {
       const encodedPath = encodeURIComponent(filePath);
-      const res = await fetch(`${SYNC_URL}/vault/${this.vaultId}/file?path=${encodedPath}`);
+      const res = await fetch(`${serverUrl}/vault/${this.vaultId}/file?path=${encodedPath}`, {
+        mode: 'cors'
+      });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       return await res.json();
     } catch (err) {
@@ -49,8 +60,9 @@ export class SyncClient {
   }
 
   async checkHealth() {
+    const serverUrl = this.getServerUrl();
     try {
-      const res = await fetch(`${SYNC_URL}/health`);
+      const res = await fetch(`${serverUrl}/health`, { mode: 'cors' });
       return res.ok;
     } catch (err) {
       return false;

@@ -33,7 +33,7 @@ const styles = {
   progress: { color: '#8b949e', textAlign: 'center', padding: '20px' }
 };
 
-export default function VaultList({ vaultId, onOpenFile }) {
+export default function VaultList({ vaultId, onOpenFile, onSettings }) {
   const [files, setFiles] = useState([]);
   const [syncStatus, setSyncStatus] = useState('offline');
   const [syncProgress, setSyncProgress] = useState('');
@@ -133,7 +133,10 @@ export default function VaultList({ vaultId, onOpenFile }) {
     <div style={styles.container}>
       <div style={styles.header}>
         <h2 style={styles.title}>{vaultId}</h2>
-        <span style={{...styles.status, ...statusStyle}}>{syncStatus}</span>
+        <div>
+          <span style={{...styles.status, ...statusStyle, marginRight: '8px'}}>{syncStatus}</span>
+          <button style={{...styles.syncButton, padding: '6px 12px', fontSize: '12px'}} onClick={onSettings}>⚙️</button>
+        </div>
       </div>
       
       {syncProgress && <div style={styles.progress}>{syncProgress}</div>}
