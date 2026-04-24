@@ -29,8 +29,19 @@ const styles = {
     color: '#8b949e',
     cursor: 'not-allowed'
   },
-  error: { color: '#f85149', padding: '12px', textAlign: 'center' },
-  empty: { color: '#8b949e', textAlign: 'center', padding: '40px' }
+  error: { color: '#f85149', padding: '12px', textAlign: 'center', background: '#3d0d0d', borderRadius: '8px', marginBottom: '12px' },
+  loading: { color: '#8b949e', textAlign: 'center', padding: '40px' },
+  empty: { color: '#8b949e', textAlign: 'center', padding: '40px' },
+  retryBtn: {
+    marginTop: '12px',
+    padding: '8px 16px',
+    background: '#1f6feb',
+    color: '#fff',
+    border: 'none',
+    borderRadius: '6px',
+    fontSize: '14px',
+    cursor: 'pointer'
+  }
 };
 
 export default function VaultList({ onOpen }) {
@@ -56,7 +67,6 @@ export default function VaultList({ onOpen }) {
     setSyncing({ ...syncing, [vault.name]: true });
     try {
       const data = await request(`/api/vaults/${vault.name}/sync`, { method: 'POST' });
-      // Store synced files locally
       if (data.files) {
         data.files.forEach(file => {
           localStorage.setItem(
@@ -72,17 +82,31 @@ export default function VaultList({ onOpen }) {
     setSyncing({ ...syncing, [vault.name]: false });
   };
 
-  if (error) return <div style={styles.error}>Error: {error}</div>;
-
   return (
     <div style={styles.container}>
       <h2 style={{ fontSize: '20px', marginBottom: '16px', color: '#e6edf3' }}>Vaults</h2>
-      {vaults.length === 0 && !loading && (
+      
+      {error && (
+        <div style={styles.error}>
+          <strong>Error:</strong> {error}
+          <br />
+          <button style={styles.retryBtn} onClick={loadVaults}>Retry</button>
+        </div>
+      )}
+      
+      {loading && (
+        <div style={styles.loading}>
+          ⟳ Loading vaults...
+        </div>
+      )}
+      
+      {!loading && vaults.length === 0 && !error && (
         <div style={styles.empty}>
           No vaults found.<br />
           Check server connection in Settings.
         </div>
       )}
+      
       {vaults.map(vault => (
         <div key={vault.name} style={styles.vaultCard} onClick={() => onOpen(vault)}>
           <div style={styles.vaultName}>{vault.name}</div>

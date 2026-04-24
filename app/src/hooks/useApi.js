@@ -1,5 +1,4 @@
 import { useState, useCallback } from 'react';
-import { Capacitor, CapacitorHttp } from '@capacitor/core';
 
 const getServerUrl = () => {
   const saved = localStorage.getItem('serverUrl');
@@ -12,6 +11,30 @@ export const setServerUrl = (url) => {
 
 export const getServerUrlValue = getServerUrl;
 
+// Simple fetch with timeout
+const fetchWithTimeout = async (url, options = {}, timeout = 10000) => {
+  const controller = new AbortController();
+  const id = setTimeout(() => controller.abort(), timeout);
+  
+  try {
+    const res = await fetch(url, {
+      ...options,
+      signal: controller.signal,
+      headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+      }
+    });
+    clearTimeout(id);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return res.json();
+  } catch (err) {
+    clearTimeout(id);
+    if (err.name === 'AbortError') throw new Error('Request timed out');
+    throw err;
+  }
+};
+
 export function useApi() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -19,41 +42,9 @@ export function useApi() {
   const request = useCallback(async (endpoint, options = {}) => {
     setLoading(true);
     setError(null);
-    
-    const url = `${getServerUrl()}${endpoint}`;
-    
     try {
-      let data;
-      
-      if (Capacitor.isNativePlatform()) {
-        // Native HTTP - no CORS issues
-        const response = await CapacitorHttp.request({
-          url,
-          method: (options.method || 'GET').toUpperCase(),
-          headers: {
-            'Content-Type': 'application/json',
-            ...options.headers
-          },
-          data: options.body ? JSON.parse(options.body) : undefined
-        });
-        
-        if (response.status < 200 || response.status >= 300) {
-          throw new Error(`HTTP ${response.status}`);
-        }
-        data = response.data;
-      } else {
-        // Web fetch
-        const res = await fetch(url, {
-          ...options,
-          headers: {
-            'Content-Type': 'application/json',
-            ...options.headers
-          }
-        });
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        data = await res.json();
-      }
-      
+      const url = `${getServerUrl()}${endpoint}`;
+      const data = await fetchWithTimeout(url, options);
       setLoading(false);
       return data;
     } catch (err) {
