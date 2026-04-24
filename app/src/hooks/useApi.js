@@ -1,4 +1,5 @@
 import { useState, useCallback } from 'react';
+import { Capacitor } from '@capacitor/core';
 
 const getServerUrl = () => {
   const saved = localStorage.getItem('serverUrl');
@@ -20,15 +21,37 @@ export function useApi() {
     setError(null);
     try {
       const url = `${getServerUrl()}${endpoint}`;
-      const res = await fetch(url, {
-        ...options,
-        headers: {
-          'Content-Type': 'application/json',
-          ...options.headers
+      
+      let data;
+      if (Capacitor.isNativePlatform()) {
+        // Native HTTP - no CORS issues
+        const { CapacitorHttp } = await import('@capacitor/core');
+        const response = await CapacitorHttp.request({
+          url,
+          method: (options.method || 'GET').toUpperCase(),
+          headers: {
+            'Content-Type': 'application/json',
+            ...options.headers
+          },
+          data: options.body ? JSON.parse(options.body) : undefined
+        });
+        if (response.status < 200 || response.status >= 300) {
+          throw new Error(`HTTP ${response.status}`);
         }
-      });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const data = await res.json();
+        data = response.data;
+      } else {
+        // Web fetch
+        const res = await fetch(url, {
+          ...options,
+          headers: {
+            'Content-Type': 'application/json',
+            ...options.headers
+          }
+        });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        data = await res.json();
+      }
+      
       setLoading(false);
       return data;
     } catch (err) {
