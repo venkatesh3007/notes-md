@@ -2,7 +2,7 @@ import { useState, useCallback } from 'react';
 
 const getServerUrl = () => {
   const saved = localStorage.getItem('serverUrl');
-  return saved || 'http://localhost:3000';
+  return saved || 'http://139.59.57.222:3000';
 };
 
 export const setServerUrl = (url) => {
