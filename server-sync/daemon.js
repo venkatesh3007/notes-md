@@ -1,10 +1,10 @@
 const fs = require('fs');
 const path = require('path');
-const { SimplePeer } = require('simple-peer');
+const SimplePeer = require('simple-peer');
 const wrtc = require('wrtc');
 const fetch = require('node-fetch');
 
-const SIGNAL_URL = process.env.SIGNAL_URL || 'https://notes-md.netlify.app/.netlify/functions';
+const SIGNAL_URL = process.env.SIGNAL_URL || 'http://localhost:3333';
 const VAULT_PATH = process.env.VAULT_PATH || './vaults';
 const VAULT_ID = process.env.VAULT_ID || 'default-vault';
 const PEER_ID = `server-${Date.now()}`;
@@ -20,17 +20,12 @@ class ServerSync {
   async start() {
     console.log(`Server sync starting for vault: ${VAULT_ID}`);
     console.log(`Watching: ${this.vaultPath}`);
+    console.log(`Signaling: ${SIGNAL_URL}`);
     
-    // Initial scan
     await this.scanFiles();
-    
-    // Register with signaling server
     await this.register();
     
-    // Start polling for connection requests
     this.pollInterval = setInterval(() => this.poll(), 2000);
-    
-    // Watch for file changes
     this.watchFiles();
     
     console.log('Server sync daemon running');
@@ -52,15 +47,20 @@ class ServerSync {
 
   async readDirRecursive(dir) {
     const files = [];
-    const entries = fs.readdirSync(dir);
-    for (const entry of entries) {
-      const fullPath = path.join(dir, entry);
-      const stat = fs.statSync(fullPath);
-      if (stat.isDirectory()) {
-        files.push(...await this.readDirRecursive(fullPath));
-      } else if (entry.endsWith('.md')) {
-        files.push(fullPath);
+    try {
+      const entries = fs.readdirSync(dir);
+      for (const entry of entries) {
+        if (entry.startsWith('.')) continue;
+        const fullPath = path.join(dir, entry);
+        const stat = fs.statSync(fullPath);
+        if (stat.isDirectory()) {
+          files.push(...await this.readDirRecursive(fullPath));
+        } else if (entry.endsWith('.md')) {
+          files.push(fullPath);
+        }
       }
+    } catch (err) {
+      // Directory might not exist
     }
     return files;
   }
@@ -73,8 +73,7 @@ class ServerSync {
         body: JSON.stringify({
           vaultId: VAULT_ID,
           peerId: PEER_ID,
-          deviceType: 'server',
-          action: 'register'
+          deviceType: 'server'
         })
       });
     } catch (err) {
@@ -84,14 +83,12 @@ class ServerSync {
 
   async poll() {
     try {
-      // Re-register to stay alive
       await this.register();
       
-      // Poll for signaling messages
-      const res = await fetch(`${SIGNAL_URL}/relay`, {
+      const res = await fetch(`${SIGNAL_URL}/relay/poll`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'poll', fromPeerId: PEER_ID })
+        body: JSON.stringify({ fromPeerId: PEER_ID })
       });
       
       const data = await res.json();
@@ -99,7 +96,7 @@ class ServerSync {
         await this.handleSignal(msg);
       }
     } catch (err) {
-      // Silent fail, retry next poll
+      // Retry next poll
     }
   }
 
@@ -113,11 +110,10 @@ class ServerSync {
     const peer = new SimplePeer({ initiator: false, wrtc });
     
     peer.on('signal', async (answer) => {
-      await fetch(`${SIGNAL_URL}/relay`, {
+      await fetch(`${SIGNAL_URL}/relay/send`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          action: 'send',
           fromPeerId: PEER_ID,
           toPeerId: fromPeerId,
           type: 'answer',
@@ -167,17 +163,20 @@ class ServerSync {
   }
 
   watchFiles() {
-    fs.watch(this.vaultPath, { recursive: true }, (eventType, filename) => {
-      if (filename && filename.endsWith('.md')) {
-        console.log(`File changed: ${filename}`);
-        this.scanFiles().then(() => {
-          // Notify all connected peers
-          for (const peer of this.peers.values()) {
-            this.sendFileManifest(peer);
-          }
-        });
-      }
-    });
+    try {
+      fs.watch(this.vaultPath, { recursive: true }, (eventType, filename) => {
+        if (filename && filename.endsWith('.md')) {
+          console.log(`File changed: ${filename}`);
+          this.scanFiles().then(() => {
+            for (const peer of this.peers.values()) {
+              this.sendFileManifest(peer);
+            }
+          });
+        }
+      });
+    } catch (err) {
+      console.error('Watch failed:', err.message);
+    }
   }
 
   stop() {
@@ -188,7 +187,6 @@ class ServerSync {
   }
 }
 
-// Start if run directly
 if (require.main === module) {
   const sync = new ServerSync();
   sync.start().catch(console.error);

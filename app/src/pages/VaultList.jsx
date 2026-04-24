@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { db } from '../lib/db';
-import { P2PClient } from '../lib/p2p';
+import { SyncClient } from '../lib/sync';
 
 const styles = {
   container: { padding: '16px', overflow: 'auto', height: '100%', background: '#0d1117' },
@@ -35,117 +35,93 @@ const styles = {
 
 export default function VaultList({ vaultId, onOpenFile }) {
   const [files, setFiles] = useState([]);
-  const [syncStatus, setSyncStatus] = useState('offline'); // offline, connecting, syncing, synced
+  const [syncStatus, setSyncStatus] = useState('offline');
   const [syncProgress, setSyncProgress] = useState('');
-  const [p2p, setP2p] = useState(null);
-  const [pendingFiles, setPendingFiles] = useState([]);
+  const [syncClient, setSyncClient] = useState(null);
 
   useEffect(() => {
     initVault();
     return () => {
-      if (p2p) p2p.stop();
+      if (syncClient) syncClient.stop();
     };
   }, [vaultId]);
 
   async function initVault() {
     try {
-      // Init DB
       await db.init();
-      
-      // Save vault
-      await db.saveVault({
-        id: vaultId,
-        name: vaultId,
-        createdAt: new Date().toISOString()
-      });
+      await db.saveVault({ id: vaultId, name: vaultId });
       
       // Load local files
       const localFiles = await db.getFiles(vaultId);
       setFiles(localFiles);
       
-      // Start P2P
-      const peerId = `mobile-${Date.now()}`;
-      const client = new P2PClient(vaultId, peerId);
-      
-      client.onConnect = (peerId) => {
-        setSyncStatus('syncing');
-        setSyncProgress('Connected to server, fetching file list...');
+      // Start sync
+      const client = new SyncClient(vaultId);
+      client.onFilesUpdated = (serverFiles) => {
+        syncFiles(client, serverFiles);
       };
       
-      client.onManifest = (peerId, manifest) => {
-        handleManifest(client, manifest);
-      };
-      
-      client.onFile = (peerId, fileData) => {
-        handleReceivedFile(fileData);
-      };
-      
-      await client.start();
-      setP2p(client);
+      setSyncClient(client);
       setSyncStatus('connecting');
-      setSyncProgress('Looking for server...');
+      setSyncProgress('Connecting to server...');
+      
+      // Check health then sync
+      const healthy = await client.checkHealth();
+      if (healthy) {
+        await client.sync();
+        client.start();
+      } else {
+        setSyncStatus('offline');
+        setSyncProgress('Server offline. Showing cached files.');
+      }
     } catch (err) {
       console.error('Init error:', err);
       setSyncStatus('offline');
+      setSyncProgress(err.message);
     }
   }
 
-  async function handleManifest(client, manifest) {
+  async function syncFiles(client, serverFiles) {
+    setSyncStatus('syncing');
+    setSyncProgress(`Found ${serverFiles.length} files. Syncing...`);
+    
     const localFiles = await db.getFiles(vaultId);
     const localMap = new Map(localFiles.map(f => [f.path, f]));
     
-    const needed = manifest.filter(file => {
+    let synced = 0;
+    for (const file of serverFiles) {
       const local = localMap.get(file.path);
-      return !local || new Date(file.modified) > new Date(local.modified);
-    });
-    
-    if (needed.length === 0) {
-      setSyncStatus('synced');
-      setSyncProgress('Up to date');
-      return;
-    }
-    
-    setPendingFiles(needed);
-    setSyncProgress(`Syncing ${needed.length} files...`);
-    
-    // Request each file from the server peer
-    for (const file of needed) {
-      const serverPeer = Array.from(client.connectedPeers).find(id => id.startsWith('server-'));
-      if (serverPeer) {
-        client.requestFile(serverPeer, file.path);
+      const needsUpdate = !local || new Date(file.modified) > new Date(local.modified);
+      
+      if (needsUpdate) {
+        try {
+          const fileData = await client.fetchFile(file.path);
+          await db.saveFile(vaultId, fileData.path, fileData.content, fileData.modified);
+          synced++;
+          setSyncProgress(`Synced ${synced}/${serverFiles.length} files...`);
+        } catch (err) {
+          console.error(`Failed to sync ${file.path}:`, err);
+        }
       }
     }
-  }
-
-  async function handleReceivedFile(fileData) {
-    await db.saveFile(vaultId, fileData.path, fileData.content, fileData.modified);
     
-    setPendingFiles(prev => {
-      const remaining = prev.filter(f => f.path !== fileData.path);
-      if (remaining.length === 0) {
-        setSyncStatus('synced');
-        setSyncProgress('Sync complete');
-      } else {
-        setSyncProgress(`Syncing... ${remaining.length} remaining`);
-      }
-      return remaining;
-    });
-    
-    // Refresh file list
+    // Refresh
     const updated = await db.getFiles(vaultId);
     setFiles(updated);
+    setSyncStatus('synced');
+    setSyncProgress(synced > 0 ? `Synced ${synced} files` : 'Up to date');
   }
 
   async function manualSync() {
-    if (!p2p) return;
-    setSyncStatus('connecting');
-    setSyncProgress('Searching for peers...');
-    
-    const peers = await p2p.discover();
-    for (const peer of peers) {
-      if (peer.deviceType === 'server') {
-        await p2p.connectToPeer(peer.peerId);
-      }
+    if (!syncClient) return;
+    setSyncStatus('syncing');
+    setSyncProgress('Syncing...');
+    try {
+      const files = await syncClient.sync();
+      await syncFiles(syncClient, files);
+    } catch (err) {
+      setSyncStatus('offline');
+      setSyncProgress('Sync failed: ' + err.message);
     }
   }
 
@@ -157,34 +133,24 @@ export default function VaultList({ vaultId, onOpenFile }) {
     <div style={styles.container}>
       <div style={styles.header}>
         <h2 style={styles.title}>{vaultId}</h2>
-        <div>
-          <span style={{...styles.status, ...statusStyle}}>
-            {syncStatus}
-          </span>
-        </div>
+        <span style={{...styles.status, ...statusStyle}}>{syncStatus}</span>
       </div>
       
-      {syncProgress && (
-        <div style={styles.progress}>{syncProgress}</div>
-      )}
+      {syncProgress && <div style={styles.progress}>{syncProgress}</div>}
       
-      <button style={styles.syncButton} onClick={manualSync}>
-        ↻ Sync Now
-      </button>
+      <button style={styles.syncButton} onClick={manualSync}>↻ Sync Now</button>
       
       <div style={{ marginTop: '16px' }}>
         {files.length === 0 ? (
           <div style={styles.empty}>
-            No files yet.<br />
-            Press "Sync Now" to fetch from server.
+            No files yet.<br />Press "Sync Now" to fetch from server.
           </div>
         ) : (
           files.map(file => (
             <div key={file.id} style={styles.fileCard} onClick={() => onOpenFile(file)}>
               <div style={styles.fileName}>{file.path}</div>
               <div style={styles.fileMeta}>
-                {new Date(file.modified).toLocaleDateString()} • 
-                {(file.content?.length || 0).toLocaleString()} chars
+                {new Date(file.modified).toLocaleDateString()} • {(file.content?.length || 0).toLocaleString()} chars
               </div>
             </div>
           ))

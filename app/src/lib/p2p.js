@@ -1,6 +1,6 @@
-// P2P client using WebRTC + Netlify signaling
+// P2P client using WebRTC + local signaling server
 
-const SIGNAL_URL = 'https://notes-md.netlify.app/.netlify/functions';
+const SIGNAL_URL = 'http://139.59.57.222:3333';
 
 export class P2PClient {
   constructor(vaultId, peerId) {
@@ -27,8 +27,7 @@ export class P2PClient {
         body: JSON.stringify({
           vaultId: this.vaultId,
           peerId: this.peerId,
-          deviceType: 'mobile',
-          action: 'register'
+          deviceType: 'mobile'
         })
       });
     } catch (err) {
@@ -50,17 +49,15 @@ export class P2PClient {
   async connectToPeer(targetPeerId) {
     if (this.peers.has(targetPeerId)) return;
 
-    // Dynamic import SimplePeer (only needed in browser)
-    const { default: SimplePeer } = await import('simple-peer');
+    const SimplePeer = (await import('simple-peer')).default;
     
     const peer = new SimplePeer({ initiator: true, trickle: false });
     
     peer.on('signal', async (offer) => {
-      await fetch(`${SIGNAL_URL}/relay`, {
+      await fetch(`${SIGNAL_URL}/relay/send`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          action: 'send',
           fromPeerId: this.peerId,
           toPeerId: targetPeerId,
           type: 'offer',
@@ -95,14 +92,12 @@ export class P2PClient {
 
   async poll() {
     try {
-      // Re-register to stay alive
       await this.register();
       
-      // Poll for signaling messages
-      const res = await fetch(`${SIGNAL_URL}/relay`, {
+      const res = await fetch(`${SIGNAL_URL}/relay/poll`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'poll', fromPeerId: this.peerId })
+        body: JSON.stringify({ fromPeerId: this.peerId })
       });
       
       const data = await res.json();
@@ -110,7 +105,6 @@ export class P2PClient {
         await this.handleSignal(msg);
       }
       
-      // Auto-discover and connect to server peers
       const peers = await this.discover();
       for (const peer of peers) {
         if (peer.deviceType === 'server' && !this.peers.has(peer.peerId)) {
@@ -125,9 +119,7 @@ export class P2PClient {
   async handleSignal(msg) {
     if (msg.type === 'answer') {
       const peer = this.peers.get(msg.from);
-      if (peer) {
-        peer.signal(msg.data);
-      }
+      if (peer) peer.signal(msg.data);
     }
   }
 
