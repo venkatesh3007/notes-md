@@ -1,5 +1,5 @@
 import { useState, useCallback } from 'react';
-import { Capacitor } from '@capacitor/core';
+import { Capacitor, CapacitorHttp } from '@capacitor/core';
 
 const getServerUrl = () => {
   const saved = localStorage.getItem('serverUrl');
@@ -19,13 +19,14 @@ export function useApi() {
   const request = useCallback(async (endpoint, options = {}) => {
     setLoading(true);
     setError(null);
+    
+    const url = `${getServerUrl()}${endpoint}`;
+    
     try {
-      const url = `${getServerUrl()}${endpoint}`;
-      
       let data;
+      
       if (Capacitor.isNativePlatform()) {
         // Native HTTP - no CORS issues
-        const { CapacitorHttp } = await import('@capacitor/core');
         const response = await CapacitorHttp.request({
           url,
           method: (options.method || 'GET').toUpperCase(),
@@ -35,6 +36,7 @@ export function useApi() {
           },
           data: options.body ? JSON.parse(options.body) : undefined
         });
+        
         if (response.status < 200 || response.status >= 300) {
           throw new Error(`HTTP ${response.status}`);
         }
@@ -55,7 +57,8 @@ export function useApi() {
       setLoading(false);
       return data;
     } catch (err) {
-      setError(err.message);
+      const msg = err.message || 'Network error';
+      setError(msg);
       setLoading(false);
       throw err;
     }
