@@ -6,6 +6,11 @@
     "androidScheme": "https",
     "cleartext": true
   },
+  "plugins": {
+    "CapacitorHttp": {
+      "enabled": true
+    }
+  },
   "android": {
     "buildOptions": {
       "keystorePath": "",

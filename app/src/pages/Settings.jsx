@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { CapacitorHttp } from '@capacitor/core';
 
 const styles = {
   container: { padding: '16px', background: '#0d1117', minHeight: '100vh', color: '#e6edf3' },
@@ -83,17 +84,13 @@ export default function Settings({ onBack }) {
     log(`Testing: ${serverUrl}/health`);
     
     try {
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 10000);
-      
-      const res = await fetch(`${serverUrl}/health`, {
-        mode: 'cors',
-        signal: controller.signal
+      const res = await CapacitorHttp.get({
+        url: `${serverUrl}/health`,
+        headers: { 'Accept': 'application/json' }
       });
-      clearTimeout(timeout);
       
-      if (res.ok) {
-        const data = await res.json();
+      if (res.status >= 200 && res.status < 300) {
+        const data = typeof res.data === 'string' ? JSON.parse(res.data) : res.data;
         setTestResult({ type: 'success', text: `Connected! Server: ${data.vault}` });
         log('Connection OK: ' + JSON.stringify(data));
       } else {
@@ -111,9 +108,13 @@ export default function Settings({ onBack }) {
     log(`Testing files: ${serverUrl}/vault/${vaultId}/files`);
     
     try {
-      const res = await fetch(`${serverUrl}/vault/${vaultId}/files`, { mode: 'cors' });
-      if (res.ok) {
-        const data = await res.json();
+      const res = await CapacitorHttp.get({
+        url: `${serverUrl}/vault/${vaultId}/files`,
+        headers: { 'Accept': 'application/json' }
+      });
+      
+      if (res.status >= 200 && res.status < 300) {
+        const data = typeof res.data === 'string' ? JSON.parse(res.data) : res.data;
         const count = data.files?.length || 0;
         setTestResult({ type: 'success', text: `Found ${count} files` });
         log(`Files OK: ${count} files`);

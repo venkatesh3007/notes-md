@@ -1,4 +1,5 @@
-// Sync client — fetches files from server via HTTP
+import { CapacitorHttp } from '@capacitor/core';
+
 function getSettings() {
   try {
     const saved = localStorage.getItem('notes-md-settings');
@@ -26,12 +27,16 @@ export class SyncClient {
   async sync() {
     const serverUrl = this.getServerUrl();
     try {
-      const res = await fetch(`${serverUrl}/vault/${this.vaultId}/files`, {
-        mode: 'cors',
+      const res = await CapacitorHttp.get({
+        url: `${serverUrl}/vault/${this.vaultId}/files`,
         headers: { 'Accept': 'application/json' }
       });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const data = await res.json();
+      
+      if (res.status < 200 || res.status >= 300) {
+        throw new Error(`HTTP ${res.status}`);
+      }
+      
+      const data = typeof res.data === 'string' ? JSON.parse(res.data) : res.data;
       
       if (this.onFilesUpdated) {
         this.onFilesUpdated(data.files || []);
@@ -47,12 +52,16 @@ export class SyncClient {
   async fetchFile(filePath) {
     const serverUrl = this.getServerUrl();
     try {
-      const encodedPath = encodeURIComponent(filePath);
-      const res = await fetch(`${serverUrl}/vault/${this.vaultId}/file?path=${encodedPath}`, {
-        mode: 'cors'
+      const res = await CapacitorHttp.get({
+        url: `${serverUrl}/vault/${this.vaultId}/file?path=${encodeURIComponent(filePath)}`,
+        headers: { 'Accept': 'application/json' }
       });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      return await res.json();
+      
+      if (res.status < 200 || res.status >= 300) {
+        throw new Error(`HTTP ${res.status}`);
+      }
+      
+      return typeof res.data === 'string' ? JSON.parse(res.data) : res.data;
     } catch (err) {
       console.error('Fetch file failed:', err);
       throw err;
@@ -62,8 +71,11 @@ export class SyncClient {
   async checkHealth() {
     const serverUrl = this.getServerUrl();
     try {
-      const res = await fetch(`${serverUrl}/health`, { mode: 'cors' });
-      return res.ok;
+      const res = await CapacitorHttp.get({
+        url: `${serverUrl}/health`,
+        headers: { 'Accept': 'application/json' }
+      });
+      return res.status >= 200 && res.status < 300;
     } catch (err) {
       return false;
     }
