@@ -18,7 +18,10 @@ export class SyncClient {
   async sync() {
     try {
       // Get file list from server
-      const res = await fetch(`${SYNC_URL}/vault/${this.vaultId}/files`);
+      const res = await fetch(`${SYNC_URL}/vault/${this.vaultId}/files`, {
+        mode: 'cors',
+        headers: { 'Accept': 'application/json' }
+      });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
       

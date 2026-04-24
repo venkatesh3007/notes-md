@@ -121,7 +121,7 @@ export default function VaultList({ vaultId, onOpenFile }) {
       await syncFiles(syncClient, files);
     } catch (err) {
       setSyncStatus('offline');
-      setSyncProgress('Sync failed: ' + err.message);
+      setSyncProgress(`Error: ${err.message || 'Failed to fetch'}`);
     }
   }
 
