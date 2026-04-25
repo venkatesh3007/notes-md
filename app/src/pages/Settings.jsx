@@ -1,5 +1,4 @@
 import React, { useState, useEffect } from 'react';
-import { CapacitorHttp } from '@capacitor/core';
 
 const styles = {
   container: { padding: '16px', background: '#0d1117', minHeight: '100vh', color: '#e6edf3' },
@@ -48,7 +47,7 @@ const styles = {
 };
 
 export default function Settings({ onBack }) {
-  const [serverUrl, setServerUrl] = useState('http://139.59.57.222:3333');
+  const [serverUrl, setServerUrl] = useState('https://backup-beta-draw-giants.trycloudflare.com');
   const [vaultId, setVaultId] = useState('positioning-research');
   const [testResult, setTestResult] = useState(null);
   const [logs, setLogs] = useState([]);
@@ -62,7 +61,7 @@ export default function Settings({ onBack }) {
       const saved = localStorage.getItem('notes-md-settings');
       if (saved) {
         const parsed = JSON.parse(saved);
-        setServerUrl(parsed.serverUrl || 'http://139.59.57.222:3333');
+        setServerUrl(parsed.serverUrl || 'https://backup-beta-draw-giants.trycloudflare.com');
         setVaultId(parsed.vaultId || 'positioning-research');
       }
     } catch (e) {
@@ -82,17 +81,12 @@ export default function Settings({ onBack }) {
   async function testConnection() {
     setTestResult(null);
     log(`Testing: ${serverUrl}/health`);
-    
     try {
-      const res = await CapacitorHttp.get({
-        url: `${serverUrl}/health`,
-        headers: { 'Accept': 'application/json' }
-      });
-      
-      if (res.status >= 200 && res.status < 300) {
-        const data = typeof res.data === 'string' ? JSON.parse(res.data) : res.data;
+      const res = await fetch(`${serverUrl}/health`, { mode: 'cors' });
+      if (res.ok) {
+        const data = await res.json();
         setTestResult({ type: 'success', text: `Connected! Server: ${data.vault}` });
-        log('Connection OK: ' + JSON.stringify(data));
+        log('Connection OK');
       } else {
         setTestResult({ type: 'error', text: `HTTP ${res.status}` });
         log('HTTP error: ' + res.status);
@@ -106,18 +100,12 @@ export default function Settings({ onBack }) {
   async function testFiles() {
     setTestResult(null);
     log(`Testing files: ${serverUrl}/vault/${vaultId}/files`);
-    
     try {
-      const res = await CapacitorHttp.get({
-        url: `${serverUrl}/vault/${vaultId}/files`,
-        headers: { 'Accept': 'application/json' }
-      });
-      
-      if (res.status >= 200 && res.status < 300) {
-        const data = typeof res.data === 'string' ? JSON.parse(res.data) : res.data;
-        const count = data.files?.length || 0;
-        setTestResult({ type: 'success', text: `Found ${count} files` });
-        log(`Files OK: ${count} files`);
+      const res = await fetch(`${serverUrl}/vault/${vaultId}/files`, { mode: 'cors' });
+      if (res.ok) {
+        const data = await res.json();
+        setTestResult({ type: 'success', text: `Found ${data.files?.length || 0} files` });
+        log('Files OK');
       } else {
         setTestResult({ type: 'error', text: `HTTP ${res.status}` });
         log('Files error: ' + res.status);
@@ -140,7 +128,7 @@ export default function Settings({ onBack }) {
         style={styles.input}
         value={serverUrl}
         onChange={e => setServerUrl(e.target.value)}
-        placeholder="http://139.59.57.222:3333"
+        placeholder="https://backup-beta-draw-giants.trycloudflare.com"
       />
 
       <label style={styles.label}>Vault ID</label>
